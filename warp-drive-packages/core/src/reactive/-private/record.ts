@@ -38,7 +38,8 @@ function isPathMatch(a: string[], b: string[]) {
 }
 
 /**
- * Checks if path `a` is a prefix of path `b`.
+ * Checks if `prefix` is a prefix of `path`, treating
+ * non-string values in `prefix` and `path` as strings.
  * For example, ['widgets', 0] is a prefix of ['widgets', 0, 'title']
  */
 function isPathPrefix(prefix: string[], path: string[]): boolean {
