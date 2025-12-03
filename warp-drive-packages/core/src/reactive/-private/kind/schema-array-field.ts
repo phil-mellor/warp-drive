@@ -55,7 +55,7 @@ export function setSchemaArrayField(context: KindContext<SchemaArrayField>): boo
   if (context.value !== null && Array.isArray(context.value)) {
     // Convert any ReactiveResource instances back to raw data
     // This handles the case where the user spreads a schema-array
-    // (e.g., [...this.gizmo.widgets, newWidget]) which yields ReactiveResources,
+    // (e.g., [...myArray, newItem]) which yields ReactiveResources,
     // then assigns the result back to the field
     arrayValue = (context.value as unknown[]).map((item) => toRawValue(item, peeked ?? null)) as ArrayValue;
   }
