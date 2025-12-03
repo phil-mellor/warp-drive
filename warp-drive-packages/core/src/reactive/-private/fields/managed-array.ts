@@ -89,9 +89,7 @@ function safeForEach(
   const length = arr.length; // we need to access length to ensure we are consumed
 
   for (let index = 0; index < length; index++) {
-    // For schema-arrays, access through the proxy to get ReactiveResource instances
-    const value = useProxyAccess ? (instance as unknown as unknown[])[index] : arr[index];
-    callback.call(target, value, index, instance);
+    callback.call(target, arr[index], index, instance);
   }
 
   return instance;
