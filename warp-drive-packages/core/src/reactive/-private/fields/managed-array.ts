@@ -72,7 +72,8 @@ function safeForEach(
   arr: unknown[],
   store: Store,
   callback: ForEachCB,
-  target: unknown
+  target: unknown,
+  useProxyAccess: boolean
 ) {
   if (target === undefined) {
     target = null;
@@ -88,7 +89,9 @@ function safeForEach(
   const length = arr.length; // we need to access length to ensure we are consumed
 
   for (let index = 0; index < length; index++) {
-    callback.call(target, arr[index], index, instance);
+    // For schema-arrays, access through the proxy to get ReactiveResource instances
+    const value = useProxyAccess ? (instance as unknown as unknown[])[index] : arr[index];
+    callback.call(target, value, index, instance);
   }
 
   return instance;
@@ -158,6 +161,9 @@ export class ManagedArray {
         }
         if (prop === Context) {
           return self[Context];
+        }
+        if (prop === SOURCE) {
+          return self[SOURCE];
         }
 
         const index = convertToInt(prop);
@@ -309,13 +315,42 @@ export class ManagedArray {
 
         if (isArrayGetter(prop)) {
           let fn = boundFns.get(prop);
+          // Plain schema-arrays (without extensions) should yield raw values during iteration
+          // to allow safe spread-and-reassign patterns. Legacy arrays with extensions
+          // (like FragmentArray) should continue to yield ReactiveResources for compatibility.
+          const isPlainSchemaArray = field.kind === 'schema-array' && !extensions;
 
           if (fn === undefined) {
             if (prop === 'forEach') {
               fn = function () {
                 consumeInternalSignal(_SIGNAL);
                 transaction = true;
-                const result = safeForEach(receiver, target, context.store, arguments[0] as ForEachCB, arguments[1]);
+                // For plain schema-array, forEach yields raw values to enable safe reassignment
+                // For arrays with extensions (like FragmentArray), forEach yields ReactiveResources
+                const result = safeForEach(
+                  receiver,
+                  target,
+                  context.store,
+                  arguments[0] as ForEachCB,
+                  arguments[1],
+                  !isPlainSchemaArray // useProxyAccess: true for arrays with extensions, false for plain schema-array
+                );
+                transaction = false;
+                return result;
+              };
+            } else if (
+              isPlainSchemaArray &&
+              (prop === Symbol.iterator || prop === 'values' || prop === 'entries' || prop === 'keys')
+            ) {
+              // For schema-arrays, iterators must yield RAW values (not ReactiveResources)
+              // to allow safe spread-and-reassign patterns like: arr = [...arr, newItem]
+              // If we yield ReactiveResources, they would be stored in the cache, causing
+              // infinite recursion when the cache tries to navigate through them.
+              // Use `target` (raw array) instead of `receiver` (proxy) for iteration.
+              fn = function () {
+                consumeInternalSignal(_SIGNAL);
+                transaction = true;
+                const result = Reflect.apply(target[prop] as ProxiedMethod, target, arguments) as unknown;
                 transaction = false;
                 return result;
               };

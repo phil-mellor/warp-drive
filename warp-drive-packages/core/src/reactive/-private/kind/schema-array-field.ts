@@ -9,9 +9,16 @@ import type { ManagedArray } from '../fields/managed-array.ts';
 export { getArrayField as getSchemaArrayField } from './array-field';
 
 export function setSchemaArrayField(context: KindContext<SchemaArrayField>): boolean {
-  const arrayValue = context.value === null ? null : (context.value as ArrayValue)?.slice();
   const fieldSignal = peekInternalSignal(context.signals, context.path.at(-1)!);
   const peeked = fieldSignal?.value as ManagedArray | undefined | null;
+
+  let arrayValue: ArrayValue | null = null;
+
+  if (context.value !== null && Array.isArray(context.value)) {
+    // Store the array value directly - iteration yields raw values,
+    // so we don't need to convert ReactiveResources
+    arrayValue = context.value as ArrayValue;
+  }
 
   context.store.cache.setAttr(context.resourceKey, context.path, arrayValue);
   if (peeked) {
