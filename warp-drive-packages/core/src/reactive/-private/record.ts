@@ -37,6 +37,15 @@ function isPathMatch(a: string[], b: string[]) {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
+/**
+ * Checks if path `a` is a prefix of path `b`.
+ * For example, ['widgets', 0] is a prefix of ['widgets', 0, 'title']
+ */
+function isPathPrefix(prefix: string[], path: string[]): boolean {
+  if (prefix.length >= path.length) return false;
+  return prefix.every((v, i) => String(v) === String(path[i]));
+}
+
 function isNonEnumerableProp(prop: string | number | symbol) {
   return (
     prop === 'constructor' ||
@@ -156,6 +165,19 @@ export class ReactiveResource {
             if (key) {
               if (Array.isArray(key)) {
                 if (context.path === null) return; // deep paths will be handled by embedded records
+
+                // For embedded records, check if the notification path starts with our path
+                // and has one more segment (the field being updated)
+                if (isEmbedded && isPathPrefix(context.path, key) && key.length === context.path.length + 1) {
+                  // The last segment is the field name that was updated
+                  const fieldName = key[key.length - 1];
+                  const signal = signals.get(fieldName);
+                  if (signal) {
+                    notifyInternalSignal(signal);
+                  }
+                  return;
+                }
+
                 // TODO we should have the notification manager
                 // ensure it is safe for each callback to mutate this array
                 if (isPathMatch(context.path, key)) {

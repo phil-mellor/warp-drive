@@ -315,9 +315,6 @@ export class ManagedArray {
 
         if (isArrayGetter(prop)) {
           let fn = boundFns.get(prop);
-          // Plain schema-arrays (without extensions) should yield raw values during iteration
-          // to allow safe spread-and-reassign patterns. Legacy arrays with extensions
-          // (like FragmentArray) should continue to yield ReactiveResources for compatibility.
           const isPlainSchemaArray = field.kind === 'schema-array' && !extensions;
 
           if (fn === undefined) {
@@ -331,7 +328,7 @@ export class ManagedArray {
                   context.store,
                   arguments[0] as ForEachCB,
                   arguments[1],
-                  true // useProxyAccess: yield ReactiveResources for all array types
+                  isPlainSchemaArray
                 );
                 transaction = false;
                 return result;
@@ -340,7 +337,7 @@ export class ManagedArray {
               isPlainSchemaArray &&
               (prop === Symbol.iterator || prop === 'values' || prop === 'entries' || prop === 'keys')
             ) {
-              // For plain schema-arrays, iterators yield ReactiveResources (for UI reactivity).
+              // For plain schema-arrays, iterators yield ReactiveResources.
               // The setSchemaArrayField function will convert them back to raw data on reassignment.
               fn = function* () {
                 consumeInternalSignal(_SIGNAL);

@@ -1293,7 +1293,8 @@ export class JSONAPICache implements Cache {
       }
     }
 
-    this._capabilities.notifyChange(identifier, 'attributes', basePath);
+    // Notify with the full path so embedded objects can receive proper notifications
+    this._capabilities.notifyChange(identifier, 'attributes', path);
   }
 
   /**
