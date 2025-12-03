@@ -161,14 +161,9 @@ module('SchemaArray | Iterable Behaviors', function (hooks) {
     try {
       const value = [...record.addresses] as Address[];
       assert.true(true, 'spread should not throw');
-      // Note: spread yields raw objects (not ReactiveResources) to enable safe reassignment
-      // Compare data content, not object identity
       assert.deepEqual(
-        value.map((v) => ({ street: v.street, city: v.city })),
-        [
-          { street: '123 Area St', city: 'Baytown' },
-          { street: '456 Land St', city: 'Oaktown' },
-        ],
+        value,
+        [record.addresses[0], record.addresses[1]],
         'spread should remove constructor and include all other fields in the schema'
       );
     } catch (e: unknown) {
@@ -238,16 +233,7 @@ module('SchemaArray | Iterable Behaviors', function (hooks) {
       }
 
       assert.true(true, 'for...of should not throw');
-      // Note: for...of yields raw objects (not ReactiveResources) to enable safe reassignment
-      // Compare data content, not object identity
-      assert.deepEqual(
-        value.map((v) => ({ street: v.street, city: v.city })),
-        [
-          { street: '123 Area St', city: 'Baytown' },
-          { street: '456 Land St', city: 'Oaktown' },
-        ],
-        'for...of should work'
-      );
+      assert.deepEqual(value, [record.addresses[0], record.addresses[1]], 'for...of should work');
     } catch (e: unknown) {
       assert.true(false, `for...of should not throw: ${(e as Error).message}`);
     }
@@ -310,16 +296,7 @@ module('SchemaArray | Iterable Behaviors', function (hooks) {
     try {
       const value = Array.from(record.addresses);
       assert.true(true, 'Array.from should not throw');
-      // Note: Array.from yields raw objects (not ReactiveResources) to enable safe reassignment
-      // Compare data content, not object identity
-      assert.deepEqual(
-        value.map((v) => ({ street: v.street, city: v.city })),
-        [
-          { street: '123 Area St', city: 'Baytown' },
-          { street: '456 Land St', city: 'Oaktown' },
-        ],
-        'Array.from should work'
-      );
+      assert.deepEqual(value, [record.addresses[0], record.addresses[1]], 'Array.from should work');
     } catch (e: unknown) {
       assert.true(false, `Array.from should not throw: ${(e as Error).message}`);
     }
@@ -379,20 +356,27 @@ module('SchemaArray | Iterable Behaviors', function (hooks) {
       },
     });
 
-    // Note: Iteration yields RAW values (for safe reassignment), while index access yields ReactiveResources.
-    // For reactive UI updates, use index access pattern: {{#let (get arr index) as |item|}}
+    // Spread should return the same object instances as index access
+    // (both yield ReactiveResources for UI reactivity)
     const spreadResult = [...record.addresses];
+    assert.true(spreadResult[0] === record.addresses[0], 'first item from spread is identical to index access');
+    assert.true(spreadResult[1] === record.addresses[1], 'second item from spread is identical to index access');
 
-    // Spread yields raw values (plain objects), not ReactiveResources
-    // These won't be the same as index access which returns ReactiveResources
-    assert.true(spreadResult[0] !== record.addresses[0], 'spread yields raw value, not ReactiveResource');
-    assert.true(spreadResult[1] !== record.addresses[1], 'spread yields raw value, not ReactiveResource');
+    // for...of should also yield the same instances
+    const forOfResult: Address[] = [];
+    for (const addr of record.addresses) {
+      forOfResult.push(addr);
+    }
+    assert.true(forOfResult[0] === record.addresses[0], 'first item from for...of is identical to index access');
+    assert.true(forOfResult[1] === record.addresses[1], 'second item from for...of is identical to index access');
 
-    // However, the data should be equivalent
-    const first = spreadResult[0];
-    const second = spreadResult[1];
-    assert.equal(first.street, record.addresses[0]?.street, 'first item data matches');
-    assert.equal(second.street, record.addresses[1]?.street, 'second item data matches');
+    // forEach should pass the same instances
+    const forEachResult: Address[] = [];
+    record.addresses.forEach((addr) => {
+      forEachResult.push(addr);
+    });
+    assert.true(forEachResult[0] === record.addresses[0], 'first item from forEach is identical to index access');
+    assert.true(forEachResult[1] === record.addresses[1], 'second item from forEach is identical to index access');
   });
 
   test('spread and reassign works correctly without infinite recursion', function (assert) {
