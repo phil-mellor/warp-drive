@@ -1235,17 +1235,23 @@ export class JSONAPICache implements Cache {
     const cached = this.__peek(identifier, false);
 
     // get existing cache record for base path
+    // Check localAttrs first for getting the current value (needed for newly added array items),
+    // but use remote/inflight as the "original" for change tracking
     const basePath = path[0];
-    const existing =
+    const remoteExisting =
       cached.inflightAttrs && basePath in cached.inflightAttrs
         ? cached.inflightAttrs[basePath]
         : cached.remoteAttrs && basePath in cached.remoteAttrs
           ? cached.remoteAttrs[basePath]
           : undefined;
 
+    // For finding the current value, prefer localAttrs (has latest changes including newly added items)
+    const currentValue =
+      cached.localAttrs && basePath in cached.localAttrs ? cached.localAttrs[basePath] : remoteExisting;
+
     let existingAttr;
-    if (existing) {
-      existingAttr = (existing as ObjectValue)[path[1]];
+    if (currentValue) {
+      existingAttr = (currentValue as ObjectValue)[path[1]];
 
       for (let i = 2; i < path.length; i++) {
         // the specific change we're making is at path[length - 1]
@@ -1255,7 +1261,8 @@ export class JSONAPICache implements Cache {
 
     if (existingAttr !== value) {
       cached.localAttrs = cached.localAttrs || (Object.create(null) as Record<string, Value>);
-      cached.localAttrs[basePath] = cached.localAttrs[basePath] || structuredClone(existing);
+      // Clone from remoteExisting for dirty tracking, but only if localAttrs doesn't already exist
+      cached.localAttrs[basePath] = cached.localAttrs[basePath] || structuredClone(remoteExisting);
       cached.changes = cached.changes || (Object.create(null) as Record<string, [Value, Value]>);
       let currentLocal = cached.localAttrs[basePath] as ObjectValue;
       let nextLink = 1;
@@ -1265,8 +1272,10 @@ export class JSONAPICache implements Cache {
       }
       currentLocal[path[nextLink]] = value as ObjectValue;
 
-      cached.changes[basePath] = [existing, cached.localAttrs[basePath] as ObjectValue];
+      cached.changes[basePath] = [remoteExisting, cached.localAttrs[basePath] as ObjectValue];
 
+      // After setting the value, check if the entire local object now equals remote.
+      // If so, clean up the local changes since there's effectively no change.
       // since we initiaize the value as basePath as a clone of the value at the remote basePath
       // then in theory we can use JSON.stringify to compare the two values as key insertion order
       // ought to be consistent.
@@ -1276,15 +1285,30 @@ export class JSONAPICache implements Cache {
       // so that any changes we don't understand are preserved. Thse objects would then sometimes
       // appear to be dirty unnecessarily, and for folks that open an issue we can guide them
       // to make their cache data less stateful.
+      if (remoteExisting) {
+        try {
+          const existingStr = JSON.stringify(remoteExisting);
+          const newStr = JSON.stringify(cached.localAttrs[basePath]);
+
+          // If local value equals remote after update, there are no changes, so clean up
+          if (existingStr === newStr) {
+            delete cached.localAttrs[basePath];
+            delete cached.changes[basePath];
+          }
+        } catch {
+          // noop
+        }
+      }
     } else if (cached.localAttrs) {
       try {
-        if (!existing) {
+        if (!remoteExisting) {
           return;
         }
-        const existingStr = JSON.stringify(existing);
+        const existingStr = JSON.stringify(remoteExisting);
         const newStr = JSON.stringify(cached.localAttrs[basePath]);
 
-        if (existingStr !== newStr) {
+        // If local value equals remote, there are no changes, so we can clean up
+        if (existingStr === newStr) {
           delete cached.localAttrs[basePath];
           delete cached.changes![basePath];
         }

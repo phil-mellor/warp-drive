@@ -93,10 +93,10 @@ export type CacheCapabilitiesManager = {
    */
   notifyChange(identifier: ResourceKey, namespace: 'added' | 'removed', key: null): void;
   notifyChange(identifier: RequestKey, namespace: 'added' | 'updated' | 'removed', key: null): void;
-  notifyChange(identifier: ResourceKey, namespace: NotificationType, key: string | null): void;
+  notifyChange(identifier: ResourceKey, namespace: NotificationType, key: string | string[] | null): void;
   notifyChange(
     identifier: ResourceKey | RequestKey,
     namespace: NotificationType | 'added' | 'removed' | 'updated',
-    key: string | null
+    key: string | string[] | null
   ): void;
 };
