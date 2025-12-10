@@ -87,7 +87,7 @@ module('Integration - Nested fragments', function (hooks) {
         return payload;
       },
       {
-        body: '{"user":{"info":{"name":"Tyrion Lannister","notes":["smart","short"]},"orders":[{"amount":"799.98","products":[{}]},{"amount":"10999.99","products":[{"name":"Lives of Four Kings","sku":"old-book-32","price":"10999.99"}]}]}}',
+        body: '{"user":{"info":{"name":"Tyrion Lannister","notes":["smart","short"]},"orders":[{"amount":"799.98","products":[{"name":"The Strangler","sku":"poison-md-24","price":"299.99"}]},{"amount":"10999.99","products":[{"name":"Lives of Four Kings","sku":"old-book-32","price":"10999.99"}]}]}}',
       }
     );
 

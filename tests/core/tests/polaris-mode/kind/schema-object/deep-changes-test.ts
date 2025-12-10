@@ -1647,4 +1647,164 @@ module('Kind | schema-object | Reactivity | deep changes', function (hooks) {
       'the mutable favoriteParks is restored'
     );
   });
+
+  test('Modifying schema-array with nested schema-objects does not leak ReactiveResource proxies into cache', async function (assert) {
+    const store = new Store();
+    const { schema } = store;
+    registerUserSchemas(schema);
+
+    const readable = store.push({
+      data: {
+        type: 'user',
+        id: '1',
+        attributes: {
+          name: 'Chris',
+          favoriteParks: [
+            {
+              name: 'Redwood Regional',
+              est: 1939,
+              address: {
+                street: '9299 Skyline Blvd',
+                city: { name: 'Oakland', nickname: 'The Town' },
+                state: 'CA',
+                zip: '94611',
+              },
+            },
+            {
+              name: 'Las Trampas',
+              est: 1939,
+              address: {
+                street: '18012 Bollinger Canyon Rd',
+                city: { name: 'San Ramon', nickname: 'Saint Raymond' },
+                state: 'CA',
+                zip: '94583',
+              },
+            },
+          ],
+        },
+      },
+    }) as User & ReactiveResource;
+    const user = await checkout<User>(readable);
+    const identifier = recordIdentifierFor(user);
+
+    assert.equal(user.favoriteParks.length, 2, 'we have 2 parks initially');
+
+    // Modify the array by replacing it with a new array containing one item
+    // Use a plain object with nested objects to simulate the pattern that was causing issues
+    user.favoriteParks = [
+      {
+        name: 'Tilden',
+        est: 1936,
+        address: {
+          street: '2501 Grizzly Peak Blvd',
+          city: { name: 'Berkeley', nickname: 'Plum Ghetto' },
+          state: 'CA',
+          zip: '94708',
+        },
+      },
+    ];
+
+    assert.equal(user.favoriteParks.length, 1, 'we have 1 park after modification');
+
+    // The key test: cache.peek should return data that can be structuredClone'd
+    // Previously this could fail with "DataCloneError: #<_ReactiveResource> could not be cloned"
+    // if ReactiveResource proxies leaked into the cache
+    const cachedData = store.cache.peek(identifier);
+    assert.ok(cachedData, 'cache has data for the identifier');
+
+    // This is the actual test - structuredClone should not throw
+    let clonedData: typeof cachedData | undefined;
+    try {
+      clonedData = structuredClone(cachedData);
+    } catch (e) {
+      assert.ok(false, `structuredClone should not throw but got: ${(e as Error).message}`);
+    }
+
+    assert.ok(clonedData, 'structuredClone succeeded');
+    assert.equal(
+      (clonedData?.attributes?.favoriteParks as Park[])?.[0]?.name,
+      'Tilden',
+      'the cached data has the correct park name'
+    );
+    assert.equal(
+      (clonedData?.attributes?.favoriteParks as Park[])?.[0]?.address?.street,
+      '2501 Grizzly Peak Blvd',
+      'the cached data has the correct nested address'
+    );
+
+    // Verify rollback still works
+    store.cache.rollbackAttrs(identifier);
+    assert.equal(user.favoriteParks.length, 2, 'we have 2 parks after rollback');
+  });
+
+  test('Direct splice on schema-array with nested schema-objects allows structuredClone on cache', async function (assert) {
+    const store = new Store();
+    const { schema } = store;
+    registerUserSchemas(schema);
+
+    const readable = store.push({
+      data: {
+        type: 'user',
+        id: '1',
+        attributes: {
+          name: 'Chris',
+          favoriteParks: [
+            {
+              name: 'Redwood Regional',
+              est: 1939,
+              address: {
+                street: '9299 Skyline Blvd',
+                city: { name: 'Oakland', nickname: 'The Town' },
+                state: 'CA',
+                zip: '94611',
+              },
+            },
+            {
+              name: 'Las Trampas',
+              est: 1939,
+              address: {
+                street: '18012 Bollinger Canyon Rd',
+                city: { name: 'San Ramon', nickname: 'Saint Raymond' },
+                state: 'CA',
+                zip: '94583',
+              },
+            },
+          ],
+        },
+      },
+    }) as User & ReactiveResource;
+    const user = await checkout<User>(readable);
+    const identifier = recordIdentifierFor(user);
+
+    assert.equal(user.favoriteParks.length, 2, 'we have 2 parks initially');
+
+    // Use direct splice to remove an item (simulates removeAt pattern)
+    user.favoriteParks.splice(0, 1);
+
+    assert.equal(user.favoriteParks.length, 1, 'we have 1 park after splice');
+    assert.equal(user.favoriteParks[0].name, 'Las Trampas', 'the remaining park is Las Trampas');
+
+    // The key test: cache.peek should return data that can be structuredClone'd
+    const cachedData = store.cache.peek(identifier);
+    assert.ok(cachedData, 'cache has data for the identifier');
+
+    let clonedData: typeof cachedData | undefined;
+    try {
+      clonedData = structuredClone(cachedData);
+    } catch (e) {
+      assert.ok(false, `structuredClone should not throw but got: ${(e as Error).message}`);
+    }
+
+    assert.ok(clonedData, 'structuredClone succeeded');
+    assert.equal(
+      (clonedData?.attributes?.favoriteParks as Park[])?.length,
+      1,
+      'the cached data has 1 park'
+    );
+    assert.equal(
+      (clonedData?.attributes?.favoriteParks as Park[])?.[0]?.name,
+      'Las Trampas',
+      'the cached data has the correct remaining park'
+    );
+  });
 });

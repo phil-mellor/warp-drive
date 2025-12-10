@@ -10,6 +10,7 @@ import type { ArrayValue, ObjectValue, Value } from '../../../types/json/raw.ts'
 import type { OpaqueRecordInstance } from '../../../types/record.ts';
 import type { ArrayField, HashField, SchemaArrayField } from '../../../types/schema/fields.ts';
 import type { KindContext, ObjectContext } from '../default-mode.ts';
+import { toRawValue } from '../kind/schema-array-field.ts';
 import { ReactiveResource } from '../record.ts';
 import type { SchemaService } from '../schema.ts';
 import { Context, Destroy, SOURCE } from '../symbols.ts';
@@ -420,7 +421,15 @@ export class ManagedArray {
           return performExtensionSet(receiver, extensions!, signals, prop, value);
         }
 
-        const reflect = Reflect.set(target, prop, value, receiver);
+        // Convert ReactiveResource proxies to raw values before setting
+        // This handles cases like arr[0] = arr[1] or arr[0] = { ...arr[1] }
+        // where the value may be a ReactiveResource or contain nested proxies
+        let rawValueToSet = value;
+        if (field.kind === 'schema-array' && value !== null && value !== undefined && typeof value === 'object') {
+          rawValueToSet = toRawValue(value, cache, proxy);
+        }
+
+        const reflect = Reflect.set(target, prop, rawValueToSet, receiver);
 
         if (reflect) {
           if (!field.type) {
